@@ -16,11 +16,11 @@ class USpringArmComponent;
  * AGunViewerPawn
  *
  * A product-viewer style pawn for inspecting gun models.
- * Works like a 3D product viewer on an e-commerce site:
- *   - Left-click drag to rotate the gun
+ * Works like the Teidore Armory website:
+ *   - Left-click drag to rotate the gun — auto-returns to default when released
  *   - Scroll wheel to zoom in/out
- *   - Right-click drag to pan
- *   - Middle mouse to reset view
+ *   - Right-click drag to pan — auto-returns when released
+ *   - Rotation lock: when enabled, the gun stays where you leave it
  *
  * Attach your gun mesh actors as children of the GunPivot component in the editor.
  */
@@ -73,9 +73,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> PanAction;
 
-	/** Middle mouse button — reset view to defaults */
+	/** Toggle rotation lock (e.g. bound to a key or UI button) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-	TObjectPtr<UInputAction> ResetAction;
+	TObjectPtr<UInputAction> ToggleLockAction;
 
 	// ─── Tuning Parameters ───────────────────────────────────────
 
@@ -127,13 +127,39 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Pan")
 	float MaxPanDistance = 50.0f;
 
+	/** How quickly the gun returns to its default position after releasing the mouse */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|AutoReturn")
+	float AutoReturnInterpSpeed = 3.0f;
+
+	/** Delay in seconds after releasing the mouse before auto-return begins */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|AutoReturn")
+	float AutoReturnDelay = 0.5f;
+
+	// ─── Rotation Lock ───────────────────────────────────────────
+
+	/**
+	 * When true, the gun stays wherever the user leaves it (no auto-return).
+	 * Toggle via ToggleLockAction input or call SetRotationLocked() from UI/Blueprint.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Lock")
+	bool bRotationLocked = false;
+
+	/** Call from UI buttons or Blueprint to toggle rotation lock */
+	UFUNCTION(BlueprintCallable, Category = "Viewer|Lock")
+	void SetRotationLocked(bool bLocked);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Viewer|Lock")
+	bool IsRotationLocked() const { return bRotationLocked; }
+
 private:
 	// ─── Input Callbacks ─────────────────────────────────────────
 
 	void OnRotate(const FInputActionValue& Value);
+	void OnRotateReleased(const FInputActionValue& Value);
 	void OnZoom(const FInputActionValue& Value);
 	void OnPan(const FInputActionValue& Value);
-	void OnReset(const FInputActionValue& Value);
+	void OnPanReleased(const FInputActionValue& Value);
+	void OnToggleLock(const FInputActionValue& Value);
 
 	// ─── Internal State ──────────────────────────────────────────
 
@@ -147,7 +173,17 @@ private:
 	FVector TargetPanOffset = FVector::ZeroVector;
 	FVector CurrentPanOffset = FVector::ZeroVector;
 
-	// Defaults stored on BeginPlay so Reset can restore them
+	// Defaults stored on BeginPlay so auto-return can restore them
 	FRotator DefaultRotation = FRotator::ZeroRotator;
 	FVector DefaultPanOffset = FVector::ZeroVector;
+
+	// Tracks whether the user is actively dragging
+	bool bIsDraggingRotation = false;
+	bool bIsDraggingPan = false;
+
+	// Timer for delayed auto-return after mouse release
+	float TimeSinceRotateRelease = 0.0f;
+	float TimeSincePanRelease = 0.0f;
+	bool bWaitingToReturnRotation = false;
+	bool bWaitingToReturnPan = false;
 };

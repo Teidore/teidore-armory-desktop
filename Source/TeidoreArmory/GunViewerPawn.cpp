@@ -85,6 +85,7 @@ void AGunViewerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		if (RotateAction)
 		{
 			EIC->BindAction(RotateAction, ETriggerEvent::Triggered, this, &AGunViewerPawn::OnRotate);
+			EIC->BindAction(RotateAction, ETriggerEvent::Completed, this, &AGunViewerPawn::OnRotateReleased);
 		}
 
 		// Zoom: fires on each scroll tick
@@ -97,25 +98,60 @@ void AGunViewerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		if (PanAction)
 		{
 			EIC->BindAction(PanAction, ETriggerEvent::Triggered, this, &AGunViewerPawn::OnPan);
+			EIC->BindAction(PanAction, ETriggerEvent::Completed, this, &AGunViewerPawn::OnPanReleased);
 		}
 
-		// Reset: fires once on middle mouse click
-		if (ResetAction)
+		// Toggle rotation lock
+		if (ToggleLockAction)
 		{
-			EIC->BindAction(ResetAction, ETriggerEvent::Started, this, &AGunViewerPawn::OnReset);
+			EIC->BindAction(ToggleLockAction, ETriggerEvent::Started, this, &AGunViewerPawn::OnToggleLock);
 		}
 	}
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Tick — smoothly interpolate rotation, zoom, and pan each frame
+// Tick — smoothly interpolate rotation, zoom, and pan each frame.
+// When not dragging (and rotation lock is off), auto-return to defaults.
 // ─────────────────────────────────────────────────────────────────
 
 void AGunViewerPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Smoothly interpolate rotation
+	// Auto-return rotation after release (unless locked)
+	if (!bRotationLocked && !bIsDraggingRotation && bWaitingToReturnRotation)
+	{
+		TimeSinceRotateRelease += DeltaTime;
+		if (TimeSinceRotateRelease >= AutoReturnDelay)
+		{
+			TargetRotation = FMath::RInterpTo(TargetRotation, DefaultRotation, DeltaTime, AutoReturnInterpSpeed);
+
+			// Stop auto-returning once we're close enough
+			if (TargetRotation.Equals(DefaultRotation, 0.1f))
+			{
+				TargetRotation = DefaultRotation;
+				bWaitingToReturnRotation = false;
+			}
+		}
+	}
+
+	// Auto-return pan after release (unless locked)
+	if (!bRotationLocked && !bIsDraggingPan && bWaitingToReturnPan)
+	{
+		TimeSincePanRelease += DeltaTime;
+		if (TimeSincePanRelease >= AutoReturnDelay)
+		{
+			TargetPanOffset = FMath::VInterpTo(TargetPanOffset, DefaultPanOffset, DeltaTime, AutoReturnInterpSpeed);
+
+			if (TargetPanOffset.Equals(DefaultPanOffset, 0.1f))
+			{
+				TargetPanOffset = DefaultPanOffset;
+				bWaitingToReturnPan = false;
+			}
+		}
+	}
+
+	// Smoothly interpolate rotation toward target
 	CurrentRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, RotationInterpSpeed);
 	GunPivot->SetRelativeRotation(CurrentRotation);
 
@@ -134,15 +170,26 @@ void AGunViewerPawn::Tick(float DeltaTime)
 
 void AGunViewerPawn::OnRotate(const FInputActionValue& Value)
 {
-	// Value is a 2D axis (mouse delta X, mouse delta Y)
+	bIsDraggingRotation = true;
+	bWaitingToReturnRotation = false;
+
 	const FVector2D Delta = Value.Get<FVector2D>();
 
-	// Horizontal drag = yaw, Vertical drag = pitch
 	TargetRotation.Yaw += Delta.X * RotationSpeed;
 	TargetRotation.Pitch += Delta.Y * RotationSpeed;
-
-	// Clamp pitch so the gun can't flip upside down
 	TargetRotation.Pitch = FMath::Clamp(TargetRotation.Pitch, MinPitch, MaxPitch);
+}
+
+// Called when the user releases left-click — starts the auto-return timer
+void AGunViewerPawn::OnRotateReleased(const FInputActionValue& Value)
+{
+	bIsDraggingRotation = false;
+
+	if (!bRotationLocked)
+	{
+		bWaitingToReturnRotation = true;
+		TimeSinceRotateRelease = 0.0f;
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -151,13 +198,8 @@ void AGunViewerPawn::OnRotate(const FInputActionValue& Value)
 
 void AGunViewerPawn::OnZoom(const FInputActionValue& Value)
 {
-	// Value is a 1D float: positive = scroll up (zoom in), negative = scroll down (zoom out)
 	const float ScrollDelta = Value.Get<float>();
-
-	// Subtract because scrolling up should decrease distance (move closer)
 	TargetZoomDistance -= ScrollDelta * ZoomStep;
-
-	// Clamp so the user can't zoom through the gun or lose it
 	TargetZoomDistance = FMath::Clamp(TargetZoomDistance, MinZoomDistance, MaxZoomDistance);
 }
 
@@ -167,24 +209,54 @@ void AGunViewerPawn::OnZoom(const FInputActionValue& Value)
 
 void AGunViewerPawn::OnPan(const FInputActionValue& Value)
 {
+	bIsDraggingPan = true;
+	bWaitingToReturnPan = false;
+
 	const FVector2D Delta = Value.Get<FVector2D>();
 
-	// Pan along the camera's local Y (horizontal) and Z (vertical) axes
 	TargetPanOffset.Y += Delta.X * PanSpeed;
-	TargetPanOffset.Z -= Delta.Y * PanSpeed; // Invert Y so dragging up moves gun up
-
-	// Clamp so the gun can't be dragged off-screen
+	TargetPanOffset.Z -= Delta.Y * PanSpeed;
 	TargetPanOffset.Y = FMath::Clamp(TargetPanOffset.Y, -MaxPanDistance, MaxPanDistance);
 	TargetPanOffset.Z = FMath::Clamp(TargetPanOffset.Z, -MaxPanDistance, MaxPanDistance);
 }
 
+// Called when the user releases right-click — starts the auto-return timer
+void AGunViewerPawn::OnPanReleased(const FInputActionValue& Value)
+{
+	bIsDraggingPan = false;
+
+	if (!bRotationLocked)
+	{
+		bWaitingToReturnPan = true;
+		TimeSincePanRelease = 0.0f;
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────
-// OnReset — middle mouse click snaps everything back to defaults
+// Rotation Lock — toggle via input or call from UI/Blueprint
 // ─────────────────────────────────────────────────────────────────
 
-void AGunViewerPawn::OnReset(const FInputActionValue& Value)
+void AGunViewerPawn::OnToggleLock(const FInputActionValue& Value)
 {
-	TargetRotation = DefaultRotation;
-	TargetZoomDistance = DefaultZoomDistance;
-	TargetPanOffset = DefaultPanOffset;
+	SetRotationLocked(!bRotationLocked);
+}
+
+void AGunViewerPawn::SetRotationLocked(bool bLocked)
+{
+	bRotationLocked = bLocked;
+
+	if (!bLocked)
+	{
+		// Unlocking — start auto-returning to defaults
+		bWaitingToReturnRotation = true;
+		TimeSinceRotateRelease = 0.0f;
+		bWaitingToReturnPan = true;
+		TimeSincePanRelease = 0.0f;
+	}
+	else
+	{
+		// Locking — cancel any pending auto-return
+		bWaitingToReturnRotation = false;
+		bWaitingToReturnPan = false;
+	}
 }
