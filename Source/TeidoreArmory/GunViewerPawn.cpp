@@ -6,52 +6,43 @@
 #include "InputMappingContext.h"
 
 // ─────────────────────────────────────────────────────────────────
-// Constructor — sets up the component hierarchy
+// Constructor
 // ─────────────────────────────────────────────────────────────────
 
 AGunViewerPawn::AGunViewerPawn()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	// Root
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
 
-	// GunPivot sits at the origin — attach your gun meshes to this in the editor.
-	// All rotation is applied to this component, so the gun spins in place.
+	// GunPivot — attach gun meshes here. Rotation is applied to this component.
 	GunPivot = CreateDefaultSubobject<USceneComponent>(TEXT("GunPivot"));
 	GunPivot->SetupAttachment(SceneRoot);
 
-	// Camera is offset along -X so it looks at the gun from the front.
-	// We'll move it along its local X axis based on zoom distance.
 	ViewCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ViewCamera"));
 	ViewCamera->SetupAttachment(SceneRoot);
 
-	// Initialize zoom
-	TargetZoomDistance = DefaultZoomDistance;
-	CurrentZoomDistance = DefaultZoomDistance;
+	TargetCameraDistance = MinFramingDistance;
+	CurrentCameraDistance = MinFramingDistance;
 }
 
 // ─────────────────────────────────────────────────────────────────
-// BeginPlay — register the input mapping context & store defaults
+// BeginPlay
 // ─────────────────────────────────────────────────────────────────
 
 void AGunViewerPawn::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Reinitialize zoom distances from the (potentially editor-tweaked) default
-	TargetZoomDistance = DefaultZoomDistance;
-	CurrentZoomDistance = DefaultZoomDistance;
-
-	// Place camera at the default zoom distance, looking at the origin
-	ViewCamera->SetRelativeLocation(FVector(-DefaultZoomDistance, 0.0f, 0.0f));
-	ViewCamera->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
-
-	// Store defaults so auto-return knows where to go
 	DefaultRotation = FRotator::ZeroRotator;
 
-	// Register the input mapping context with the Enhanced Input subsystem
+	// Auto-frame the gun on startup
+	RecalculateFraming();
+	CurrentCameraDistance = TargetCameraDistance;
+	ViewCamera->SetRelativeLocation(FVector(-CurrentCameraDistance, 0.0f, 0.0f));
+	ViewCamera->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
+
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
@@ -63,7 +54,6 @@ void AGunViewerPawn::BeginPlay()
 			}
 		}
 
-		// Show the mouse cursor — this is a product viewer, not an FPS
 		PC->bShowMouseCursor = true;
 		PC->bEnableClickEvents = true;
 		PC->bEnableMouseOverEvents = true;
@@ -71,7 +61,7 @@ void AGunViewerPawn::BeginPlay()
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Input Binding — connect Enhanced Input actions to our callbacks
+// Input Binding
 // ─────────────────────────────────────────────────────────────────
 
 void AGunViewerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -80,20 +70,12 @@ void AGunViewerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		// Rotate: fires every frame while left-click is held and mouse moves
 		if (RotateAction)
 		{
 			EIC->BindAction(RotateAction, ETriggerEvent::Triggered, this, &AGunViewerPawn::OnRotate);
 			EIC->BindAction(RotateAction, ETriggerEvent::Completed, this, &AGunViewerPawn::OnRotateReleased);
 		}
 
-		// Zoom: fires on each scroll tick
-		if (ZoomAction)
-		{
-			EIC->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &AGunViewerPawn::OnZoom);
-		}
-
-		// Toggle rotation lock
 		if (ToggleLockAction)
 		{
 			EIC->BindAction(ToggleLockAction, ETriggerEvent::Started, this, &AGunViewerPawn::OnToggleLock);
@@ -102,8 +84,7 @@ void AGunViewerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Tick — smoothly interpolate rotation, zoom, and pan each frame.
-// When not dragging (and rotation lock is off), auto-return to defaults.
+// Tick — interpolate rotation and camera distance each frame
 // ─────────────────────────────────────────────────────────────────
 
 void AGunViewerPawn::Tick(float DeltaTime)
@@ -118,7 +99,6 @@ void AGunViewerPawn::Tick(float DeltaTime)
 		{
 			TargetRotation = FMath::RInterpTo(TargetRotation, DefaultRotation, DeltaTime, AutoReturnInterpSpeed);
 
-			// Stop auto-returning once we're close enough
 			if (TargetRotation.Equals(DefaultRotation, 0.1f))
 			{
 				TargetRotation = DefaultRotation;
@@ -127,18 +107,17 @@ void AGunViewerPawn::Tick(float DeltaTime)
 		}
 	}
 
-	// Smoothly interpolate rotation toward target
+	// Smoothly interpolate rotation
 	CurrentRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, RotationInterpSpeed);
 	GunPivot->SetRelativeRotation(CurrentRotation);
 
-	// Smoothly interpolate zoom (camera distance along -X axis)
-	CurrentZoomDistance = FMath::FInterpTo(CurrentZoomDistance, TargetZoomDistance, DeltaTime, ZoomInterpSpeed);
-	ViewCamera->SetRelativeLocation(FVector(-CurrentZoomDistance, 0.0f, 0.0f));
-
+	// Smoothly interpolate camera distance (auto-framing)
+	CurrentCameraDistance = FMath::FInterpTo(CurrentCameraDistance, TargetCameraDistance, DeltaTime, FramingInterpSpeed);
+	ViewCamera->SetRelativeLocation(FVector(-CurrentCameraDistance, 0.0f, 0.0f));
 }
 
 // ─────────────────────────────────────────────────────────────────
-// OnRotate — left-click drag rotates the gun
+// OnRotate — left-click drag
 // ─────────────────────────────────────────────────────────────────
 
 void AGunViewerPawn::OnRotate(const FInputActionValue& Value)
@@ -153,7 +132,6 @@ void AGunViewerPawn::OnRotate(const FInputActionValue& Value)
 	TargetRotation.Pitch = FMath::Clamp(TargetRotation.Pitch, MinPitch, MaxPitch);
 }
 
-// Called when the user releases left-click — starts the auto-return timer
 void AGunViewerPawn::OnRotateReleased(const FInputActionValue& Value)
 {
 	bIsDraggingRotation = false;
@@ -166,18 +144,71 @@ void AGunViewerPawn::OnRotateReleased(const FInputActionValue& Value)
 }
 
 // ─────────────────────────────────────────────────────────────────
-// OnZoom — scroll wheel adjusts camera distance
+// Auto-Framing — calculates ideal camera distance from gun bounds
 // ─────────────────────────────────────────────────────────────────
 
-void AGunViewerPawn::OnZoom(const FInputActionValue& Value)
+float AGunViewerPawn::CalculateIdealDistance() const
 {
-	const float ScrollDelta = Value.Get<float>();
-	TargetZoomDistance -= ScrollDelta * ZoomStep;
-	TargetZoomDistance = FMath::Clamp(TargetZoomDistance, MinZoomDistance, MaxZoomDistance);
+	if (!GunPivot || !ViewCamera)
+	{
+		return MinFramingDistance;
+	}
+
+	// Get the combined bounding box of all components under GunPivot
+	FBox BoundingBox(ForceInit);
+	bool bHasBounds = false;
+
+	TArray<USceneComponent*> Children;
+	GunPivot->GetChildrenComponents(true, Children);
+
+	for (USceneComponent* Child : Children)
+	{
+		UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(Child);
+		if (Primitive && Primitive->IsVisible())
+		{
+			FBoxSphereBounds LocalBounds = Primitive->CalcLocalBounds();
+			FBox LocalBox = LocalBounds.GetBox();
+
+			if (LocalBox.IsValid)
+			{
+				// Transform to GunPivot-relative space
+				FTransform RelativeTransform = Primitive->GetComponentTransform().GetRelativeTransform(GunPivot->GetComponentTransform());
+				FBox TransformedBox = LocalBox.TransformBy(RelativeTransform);
+
+				if (bHasBounds)
+				{
+					BoundingBox += TransformedBox;
+				}
+				else
+				{
+					BoundingBox = TransformedBox;
+					bHasBounds = true;
+				}
+			}
+		}
+	}
+
+	if (!bHasBounds)
+	{
+		return MinFramingDistance;
+	}
+
+	// Use the bounding sphere radius to determine the camera distance
+	// that fits everything in the camera's field of view
+	float BoundsRadius = BoundingBox.GetExtent().Size();
+	float HalfFOVRad = FMath::DegreesToRadians(ViewCamera->FieldOfView * 0.5f);
+	float IdealDistance = (BoundsRadius * FramingPadding) / FMath::Tan(HalfFOVRad);
+
+	return FMath::Max(IdealDistance, MinFramingDistance);
+}
+
+void AGunViewerPawn::RecalculateFraming()
+{
+	TargetCameraDistance = CalculateIdealDistance();
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Rotation Lock — toggle via input or call from UI/Blueprint
+// Rotation Lock
 // ─────────────────────────────────────────────────────────────────
 
 void AGunViewerPawn::OnToggleLock(const FInputActionValue& Value)
@@ -191,13 +222,11 @@ void AGunViewerPawn::SetRotationLocked(bool bLocked)
 
 	if (!bLocked)
 	{
-		// Unlocking — start auto-returning to defaults
 		bWaitingToReturnRotation = true;
 		TimeSinceRotateRelease = 0.0f;
 	}
 	else
 	{
-		// Locking — cancel any pending auto-return
 		bWaitingToReturnRotation = false;
 	}
 }

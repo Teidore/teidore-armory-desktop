@@ -14,7 +14,7 @@ High-fidelity gun configurator desktop app built with Unreal Engine 5. Functions
 3. Wait for shaders to compile (first time takes a few minutes)
 
 ### Step 2: Create the Input Action Assets
-The GunViewerPawn needs 4 Input Action assets and 1 Input Mapping Context. Create them in the Content Browser:
+The GunViewerPawn needs 2 Input Action assets and 1 Input Mapping Context. Create them in the Content Browser:
 
 #### Create Input Actions
 Right-click in Content Browser → **Input** → **Input Action** for each:
@@ -22,7 +22,6 @@ Right-click in Content Browser → **Input** → **Input Action** for each:
 | Asset Name | Value Type | Description |
 |---|---|---|
 | `IA_Rotate` | **Axis2D (Vector2D)** | Mouse delta for rotation |
-| `IA_Zoom` | **Axis1D (float)** | Scroll wheel |
 | `IA_ToggleLock` | **Digital (bool)** | Toggle rotation lock |
 
 #### Create Input Mapping Context
@@ -33,9 +32,7 @@ Open `IMC_GunViewer` and add these mappings:
 1. **IA_Rotate** → Add key `Mouse 2D` → Add modifier **Negate** on Y axis
    - Add trigger: **Down** (modifier: Left Mouse Button)
    
-2. **IA_Zoom** → Add key `Mouse Wheel Axis`
-
-3. **IA_ToggleLock** → Add key `L` (or whatever key you prefer)
+2. **IA_ToggleLock** → Add key `L` (or whatever key you prefer)
 
 ### Step 3: Create the Map
 1. **File** → **New Level** → choose **Empty Level**
@@ -52,9 +49,8 @@ Open `IMC_GunViewer` and add these mappings:
    - In the Details panel, assign the Input Actions you created:
      - `Default Mapping Context` → `IMC_GunViewer`
      - `Rotate Action` → `IA_Rotate`
-     - `Zoom Action` → `IA_Zoom`
      - `Toggle Lock Action` → `IA_ToggleLock`
-   - Tweak zoom/rotation/pan parameters if needed
+   - Tweak rotation/framing parameters if needed
 3. **Attach gun meshes**: In the World Outliner, drag your gun mesh actors onto the `GunPivot` component of the pawn (making them children)
 
 ### Step 6: Set the GameMode
@@ -65,9 +61,10 @@ Open `IMC_GunViewer` and add these mappings:
 ### Step 7: Test
 Press **Play** in the editor:
 - **Left-click + drag** → rotate the gun (auto-returns to default when you let go)
-- **Scroll wheel** → zoom in/out (fine increments)
+- **Camera auto-frames** the gun based on its dimensions (no manual zoom needed)
 - **L key** (or your chosen key) → toggle rotation lock (gun stays where you leave it)
-- You can also call `SetRotationLocked(true/false)` from a UI button via Blueprint
+- Call `RecalculateFraming()` from Blueprint when you add/remove/swap parts — camera smoothly adjusts
+- Call `SetRotationLocked(true/false)` from a UI button via Blueprint
 
 ### Packaging as .exe
 1. **Edit** → **Project Settings** → **Packaging** → set Build Configuration to **Shipping**
