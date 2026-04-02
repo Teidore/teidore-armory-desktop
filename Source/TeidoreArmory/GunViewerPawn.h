@@ -19,7 +19,6 @@ class USpringArmComponent;
  * Works like the Teidore Armory website:
  *   - Left-click drag to rotate the gun — auto-returns to default when released
  *   - Scroll wheel to zoom in/out
- *   - Right-click drag to pan — auto-returns when released
  *   - Rotation lock: when enabled, the gun stays where you leave it
  *
  * Attach your gun mesh actors as children of the GunPivot component in the editor.
@@ -69,10 +68,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> ZoomAction;
 
-	/** Right-click drag — pan the view */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-	TObjectPtr<UInputAction> PanAction;
-
 	/** Toggle rotation lock (e.g. bound to a key or UI button) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> ToggleLockAction;
@@ -115,18 +110,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Zoom")
 	float DefaultZoomDistance = 80.0f;
 
-	/** How fast panning moves the pivot (units per pixel) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Pan")
-	float PanSpeed = 0.15f;
-
-	/** How quickly pan interpolates */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Pan")
-	float PanInterpSpeed = 8.0f;
-
-	/** Max distance the pivot can be panned from its origin */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Pan")
-	float MaxPanDistance = 50.0f;
-
 	/** How quickly the gun returns to its default position after releasing the mouse */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|AutoReturn")
 	float AutoReturnInterpSpeed = 3.0f;
@@ -157,8 +140,6 @@ private:
 	void OnRotate(const FInputActionValue& Value);
 	void OnRotateReleased(const FInputActionValue& Value);
 	void OnZoom(const FInputActionValue& Value);
-	void OnPan(const FInputActionValue& Value);
-	void OnPanReleased(const FInputActionValue& Value);
 	void OnToggleLock(const FInputActionValue& Value);
 
 	// ─── Internal State ──────────────────────────────────────────
@@ -170,20 +151,13 @@ private:
 	float TargetZoomDistance;
 	float CurrentZoomDistance;
 
-	FVector TargetPanOffset = FVector::ZeroVector;
-	FVector CurrentPanOffset = FVector::ZeroVector;
-
-	// Defaults stored on BeginPlay so auto-return can restore them
+	// Default rotation stored on BeginPlay so auto-return can restore it
 	FRotator DefaultRotation = FRotator::ZeroRotator;
-	FVector DefaultPanOffset = FVector::ZeroVector;
 
 	// Tracks whether the user is actively dragging
 	bool bIsDraggingRotation = false;
-	bool bIsDraggingPan = false;
 
 	// Timer for delayed auto-return after mouse release
 	float TimeSinceRotateRelease = 0.0f;
-	float TimeSincePanRelease = 0.0f;
 	bool bWaitingToReturnRotation = false;
-	bool bWaitingToReturnPan = false;
 };

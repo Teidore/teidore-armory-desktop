@@ -48,9 +48,8 @@ void AGunViewerPawn::BeginPlay()
 	ViewCamera->SetRelativeLocation(FVector(-DefaultZoomDistance, 0.0f, 0.0f));
 	ViewCamera->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
 
-	// Store defaults so we can reset later
+	// Store defaults so auto-return knows where to go
 	DefaultRotation = FRotator::ZeroRotator;
-	DefaultPanOffset = FVector::ZeroVector;
 
 	// Register the input mapping context with the Enhanced Input subsystem
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -94,13 +93,6 @@ void AGunViewerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 			EIC->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &AGunViewerPawn::OnZoom);
 		}
 
-		// Pan: fires every frame while right-click is held and mouse moves
-		if (PanAction)
-		{
-			EIC->BindAction(PanAction, ETriggerEvent::Triggered, this, &AGunViewerPawn::OnPan);
-			EIC->BindAction(PanAction, ETriggerEvent::Completed, this, &AGunViewerPawn::OnPanReleased);
-		}
-
 		// Toggle rotation lock
 		if (ToggleLockAction)
 		{
@@ -135,22 +127,6 @@ void AGunViewerPawn::Tick(float DeltaTime)
 		}
 	}
 
-	// Auto-return pan after release (unless locked)
-	if (!bRotationLocked && !bIsDraggingPan && bWaitingToReturnPan)
-	{
-		TimeSincePanRelease += DeltaTime;
-		if (TimeSincePanRelease >= AutoReturnDelay)
-		{
-			TargetPanOffset = FMath::VInterpTo(TargetPanOffset, DefaultPanOffset, DeltaTime, AutoReturnInterpSpeed);
-
-			if (TargetPanOffset.Equals(DefaultPanOffset, 0.1f))
-			{
-				TargetPanOffset = DefaultPanOffset;
-				bWaitingToReturnPan = false;
-			}
-		}
-	}
-
 	// Smoothly interpolate rotation toward target
 	CurrentRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, RotationInterpSpeed);
 	GunPivot->SetRelativeRotation(CurrentRotation);
@@ -159,9 +135,6 @@ void AGunViewerPawn::Tick(float DeltaTime)
 	CurrentZoomDistance = FMath::FInterpTo(CurrentZoomDistance, TargetZoomDistance, DeltaTime, ZoomInterpSpeed);
 	ViewCamera->SetRelativeLocation(FVector(-CurrentZoomDistance, 0.0f, 0.0f));
 
-	// Smoothly interpolate pan (moves the gun pivot)
-	CurrentPanOffset = FMath::VInterpTo(CurrentPanOffset, TargetPanOffset, DeltaTime, PanInterpSpeed);
-	GunPivot->SetRelativeLocation(CurrentPanOffset);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -204,35 +177,6 @@ void AGunViewerPawn::OnZoom(const FInputActionValue& Value)
 }
 
 // ─────────────────────────────────────────────────────────────────
-// OnPan — right-click drag shifts the gun pivot
-// ─────────────────────────────────────────────────────────────────
-
-void AGunViewerPawn::OnPan(const FInputActionValue& Value)
-{
-	bIsDraggingPan = true;
-	bWaitingToReturnPan = false;
-
-	const FVector2D Delta = Value.Get<FVector2D>();
-
-	TargetPanOffset.Y += Delta.X * PanSpeed;
-	TargetPanOffset.Z -= Delta.Y * PanSpeed;
-	TargetPanOffset.Y = FMath::Clamp(TargetPanOffset.Y, -MaxPanDistance, MaxPanDistance);
-	TargetPanOffset.Z = FMath::Clamp(TargetPanOffset.Z, -MaxPanDistance, MaxPanDistance);
-}
-
-// Called when the user releases right-click — starts the auto-return timer
-void AGunViewerPawn::OnPanReleased(const FInputActionValue& Value)
-{
-	bIsDraggingPan = false;
-
-	if (!bRotationLocked)
-	{
-		bWaitingToReturnPan = true;
-		TimeSincePanRelease = 0.0f;
-	}
-}
-
-// ─────────────────────────────────────────────────────────────────
 // Rotation Lock — toggle via input or call from UI/Blueprint
 // ─────────────────────────────────────────────────────────────────
 
@@ -250,13 +194,10 @@ void AGunViewerPawn::SetRotationLocked(bool bLocked)
 		// Unlocking — start auto-returning to defaults
 		bWaitingToReturnRotation = true;
 		TimeSinceRotateRelease = 0.0f;
-		bWaitingToReturnPan = true;
-		TimeSincePanRelease = 0.0f;
 	}
 	else
 	{
 		// Locking — cancel any pending auto-return
 		bWaitingToReturnRotation = false;
-		bWaitingToReturnPan = false;
 	}
 }

@@ -23,7 +23,6 @@ Right-click in Content Browser → **Input** → **Input Action** for each:
 |---|---|---|
 | `IA_Rotate` | **Axis2D (Vector2D)** | Mouse delta for rotation |
 | `IA_Zoom` | **Axis1D (float)** | Scroll wheel |
-| `IA_Pan` | **Axis2D (Vector2D)** | Mouse delta for panning |
 | `IA_ToggleLock` | **Digital (bool)** | Toggle rotation lock |
 
 #### Create Input Mapping Context
@@ -36,10 +35,7 @@ Open `IMC_GunViewer` and add these mappings:
    
 2. **IA_Zoom** → Add key `Mouse Wheel Axis`
 
-3. **IA_Pan** → Add key `Mouse 2D` → Add modifier **Negate** on Y axis
-   - Add trigger: **Down** (modifier: Right Mouse Button)
-
-4. **IA_ToggleLock** → Add key `L` (or whatever key you prefer)
+3. **IA_ToggleLock** → Add key `L` (or whatever key you prefer)
 
 ### Step 3: Create the Map
 1. **File** → **New Level** → choose **Empty Level**
@@ -57,7 +53,6 @@ Open `IMC_GunViewer` and add these mappings:
      - `Default Mapping Context` → `IMC_GunViewer`
      - `Rotate Action` → `IA_Rotate`
      - `Zoom Action` → `IA_Zoom`
-     - `Pan Action` → `IA_Pan`
      - `Toggle Lock Action` → `IA_ToggleLock`
    - Tweak zoom/rotation/pan parameters if needed
 3. **Attach gun meshes**: In the World Outliner, drag your gun mesh actors onto the `GunPivot` component of the pawn (making them children)
@@ -71,7 +66,6 @@ Open `IMC_GunViewer` and add these mappings:
 Press **Play** in the editor:
 - **Left-click + drag** → rotate the gun (auto-returns to default when you let go)
 - **Scroll wheel** → zoom in/out (fine increments)
-- **Right-click + drag** → pan (auto-returns when you let go)
 - **L key** (or your chosen key) → toggle rotation lock (gun stays where you leave it)
 - You can also call `SetRotationLocked(true/false)` from a UI button via Blueprint
 
