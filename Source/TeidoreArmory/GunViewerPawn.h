@@ -28,7 +28,7 @@ enum class EWeaponType : uint8
  * Teidore Armory desktop weapon viewer — Tarkov/CoD gunsmith style.
  *
  * Matches the web builder behavior:
- *   - Orthographic camera with viewport-based zoom
+ *   - Perspective camera with auto-framing
  *   - Full 360° drag rotation with spring-based damping
  *   - Auto snap-back to default orientation (unless rotation locked)
  *   - Auto-grabs all StaticMeshActors in the level as weapon parts
@@ -70,17 +70,21 @@ protected:
 
 	// ─── Rotation ────────────────────────────────────────────────
 
-	/** Multiplier for drag-to-rotation conversion (web uses 1.2) */
+	/** Multiplier for drag-to-rotation conversion — lower = heavier, higher = easier to spin */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Rotation")
-	float RotationSpeed = 1.2f;
+	float RotationSpeed = 3.0f;
 
-	/** Spring tension — higher = faster snap-back (web: 250) */
+	/** Spring tension — higher = faster snap-back */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Spring")
-	float SpringTension = 250.0f;
+	float SpringTension = 200.0f;
 
-	/** Spring friction — higher = less overshoot (web: 20) */
+	/** Spring friction — higher = less overshoot, more weight */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Spring")
-	float SpringFriction = 20.0f;
+	float SpringFriction = 45.0f;
+
+	/** Offset the rotation pivot upward (toward the slide). Positive = up. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Viewer|Framing")
+	float PivotVerticalOffset = 0.0f;
 
 	// ─── Rotation Lock ───────────────────────────────────────────
 
@@ -93,10 +97,9 @@ protected:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Viewer|Lock")
 	bool IsRotationLocked() const { return bRotationLocked; }
 
-	// ─── Orthographic Zoom ───────────────────────────────────────
-
-	/** Updates orthographic width based on viewport size (matches web zoom mapping) */
-	void UpdateOrthoZoom();
+	/** Call when parts are added/removed to recalculate center and offsets */
+	UFUNCTION(BlueprintCallable, Category = "Viewer|Framing")
+	void RecalculateFraming();
 
 private:
 	void OnToggleLock(const FInputActionValue& Value);
@@ -119,9 +122,4 @@ private:
 
 	// Mouse state
 	bool bIsDragging = false;
-	FVector2D LastMousePos = FVector2D::ZeroVector;
-	bool bLastMouseValid = false;
-
-	// Track last viewport width for zoom recalculation
-	int32 LastViewportWidth = 0;
 };
