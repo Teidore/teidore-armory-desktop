@@ -158,10 +158,10 @@ float AGunViewerPawn::CalculateIdealDistance() const
 	FBox BoundingBox(ForceInit);
 	bool bHasBounds = false;
 
-	TArray<USceneComponent*> Children;
-	GunPivot->GetChildrenComponents(true, Children);
+	TArray<USceneComponent*> ChildComponents;
+	GunPivot->GetChildrenComponents(true, ChildComponents);
 
-	for (USceneComponent* Child : Children)
+	for (USceneComponent* Child : ChildComponents)
 	{
 		UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(Child);
 		if (Primitive && Primitive->IsVisible())
